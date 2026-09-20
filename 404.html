@@ -25,6 +25,7 @@
     .row span{color:#64748b;font-size:12px}
     .row strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .code{color:#2563eb;font-size:22px;letter-spacing:0}
+    .usage-badge{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:24px;margin:0 0 8px;border-radius:999px;background:#0f172a;color:#fff;font-size:14px;font-weight:900}
     .notice{margin-bottom:9px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;color:#1d4ed8;padding:8px 9px;font-size:13px;font-weight:800;line-height:1.35;text-align:center}
     .message{margin-top:9px;min-height:54px;border:1px solid #e5e7eb;border-radius:7px;background:#f8fafc;padding:9px;font-size:13px;line-height:1.4;color:#334155;word-break:break-word}
     .status{display:inline-flex;align-items:center;gap:6px;color:#64748b;font-size:12px;margin-top:10px}
@@ -44,6 +45,7 @@
 
     <section id="cardPanel" class="hidden">
       <h1>像素吐司</h1>
+      <div class="usage-badge hidden" id="usageBadge">-1</div>
       <p class="muted">通过 EMQX 安全通道获取号码和验证码</p>
       <div class="grid">
         <button id="accountBtn" disabled>获取号码</button>
@@ -153,6 +155,11 @@
       $("noticeValue").classList.toggle("hidden", !text);
     }
 
+    function updateUsageBadge() {
+      const show = Number(state.useLimit || 1) >= 2 && Number(state.usedCount || 0) === 1 && !state.code;
+      $("usageBadge").classList.toggle("hidden", !show);
+    }
+
     function setConnected(ok) {
       $("mqttDot").className = `dot ${ok ? "ok" : "bad"}`;
       $("mqttText").textContent = ok ? "MQTT 已连接" : "MQTT 未连接";
@@ -178,6 +185,7 @@
     function updateView() {
       $("phoneValue").textContent = state.phone || "-";
       $("codeValue").textContent = state.code || "-";
+      updateUsageBadge();
       renderCountdown();
       updateButtons();
     }
@@ -235,6 +243,7 @@
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
       setNotice("");
       showCardPanel();
+      updateUsageBadge();
       updateButtons(true);
       setMessage("链接已核对，可以获取号码。");
     }
