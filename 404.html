@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>像素吐司</title>
+  <script src="https://unpkg.com/mqtt@5.12.0/dist/mqtt.min.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    html,body{min-height:100%;margin:0;background:#eef2f6;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+    body{display:flex;align-items:flex-start;justify-content:center;padding:18px 10px}
+    .app{width:min(430px,100%);background:#fff;border-radius:10px;padding:14px;box-shadow:0 8px 30px rgba(15,23,42,.08)}
+    h1{margin:0 0 4px;font-size:22px;line-height:1.15}
+    .muted{margin:0 0 14px;color:#64748b;font-size:12px}
+    .hidden{display:none!important}
+    .not-found{width:min(360px,100%);text-align:center;background:#0f172a;color:#e5e7eb;border-radius:10px;padding:28px 18px;box-shadow:0 8px 30px rgba(15,23,42,.16)}
+    .not-found h1{font-size:58px;line-height:1;margin:0;font-weight:900}
+    .not-found p{margin:12px 0 0;color:#94a3b8;font-size:14px;line-height:1.5}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+    button{height:40px;border:1px solid #2563eb;border-radius:7px;background:#2563eb;color:#fff;font-size:14px;font-weight:800}
+    button:disabled{opacity:.55}
+    .secondary{background:#fff;color:#2563eb}
+    .panel{border-top:1px solid #e5e7eb;margin-top:14px;padding-top:12px}
+    .row{display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center;min-height:34px;font-size:14px}
+    .row span{color:#64748b;font-size:12px}
+    .row strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .code{color:#2563eb;font-size:22px;letter-spacing:0}
+    .message{margin-top:9px;min-height:54px;border:1px solid #e5e7eb;border-radius:7px;background:#f8fafc;padding:9px;font-size:13px;line-height:1.4;color:#334155;word-break:break-word}
+    .status{display:inline-flex;align-items:center;gap:6px;color:#64748b;font-size:12px;margin-top:10px}
+    .dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1}
+    .dot.ok{background:#15803d}
+    .dot.bad{background:#b91c1c}
+  </style>
+</head>
+<body>
+  <main class="app" id="appShell">
+    <section id="loadingPanel">
+      <h1>像素吐司</h1>
+      <p class="muted">正在核对链接...</p>
+      <div class="message" id="loadingMessage">正在连接 EMQX 安全通道。</div>
+      <div class="status"><i class="dot" id="mqttDot"></i><b id="mqttText">MQTT 连接中</b></div>
+    </section>
+
+    <section id="cardPanel" class="hidden">
+      <h1>像素吐司</h1>
+      <p class="muted">通过 EMQX 安全通道获取号码和验证码</p>
+      <div class="grid">
+        <button id="accountBtn" disabled>获取号码</button>
+        <button id="codeBtn" class="secondary" disabled>查验证码</button>
+      </div>
+      <section class="panel">
+        <div class="row"><span>手机号</span><strong id="phoneValue">-</strong></div>
+        <div class="row"><span>验证码</span><strong id="codeValue" class="code">-</strong></div>
+        <div class="row"><span>剩余</span><strong id="countdownValue">-</strong></div>
+        <div class="message" id="messageValue">等待操作。</div>
+        <div class="status"><i class="dot ok"></i><b>链接已核对</b></div>
+      </section>
+    </section>
+  </main>
+
+  <section class="not-found hidden" id="notFoundPanel">
+    <h1>404</h1>
+    <p>链接不存在或已失效。</p>
+  </section>
+
+  <script>
+    const CONFIG = {
+      mqttUrl: "wss://e109e31e.ala.cn-hangzhou.emqxsl.cn:8084/mqtt",
+      username: "tusi_web_client",
+      password: "xg0Cl7HIZlqLq07qD94UzkJZ",
+      topicRoot: "pixcheese",
+    };
+
+    const clientId = `pix_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const cardKey = readCardKeyFromUrl();
+    const state = {
+      mqtt: null,
+      token: "",
+      phone: "",
+      code: "",
+      leaseExpiresAt: 0,
+      countdownTimer: null,
+      activated: false,
+    };
+
+    const $ = id => document.getElementById(id);
+
+    function readCardKeyFromUrl() {
+      const params = new URLSearchParams(location.search);
+      for (const name of ["cardKey", "key", "pwd", "password", "code"]) {
+        const value = cleanCardKey(params.get(name));
+        if (value) return value;
+      }
+      const hashValue = cleanCardKey(location.hash.replace(/^#\/?/, ""));
+      if (hashValue) return hashValue;
+      const segments = location.pathname.split("/").map(part => {
+        try { return decodeURIComponent(part); } catch { return part; }
+      }).filter(Boolean);
+      const last = cleanCardKey(segments[segments.length - 1] || "");
+      const reserved = new Set(["pixcheese", "index.html", "404.html"]);
+      if (!last || reserved.has(last.toLowerCase()) || last.includes(".")) return "";
+      return last;
+    }
+
+    function cleanCardKey(value) {
+      return String(value || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 200);
+    }
+
+    function show404() {
+      $("appShell").classList.add("hidden");
+      $("notFoundPanel").classList.remove("hidden");
+      try { state.mqtt?.end?.(true); } catch {}
+    }
+
+    function showCardPanel() {
+      $("loadingPanel").classList.add("hidden");
+      $("cardPanel").classList.remove("hidden");
+    }
+
+    function topic(name) {
+      return `${CONFIG.topicRoot}/${name}/${clientId}`;
+    }
+
+    function requestTopic(name) {
+      return `${CONFIG.topicRoot}/${name}`;
+    }
+
+    function requestId(prefix) {
+      return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function setLoading(text) {
+      $("loadingMessage").textContent = text || "";
+    }
+
+    function setMessage(text) {
+      $("messageValue").textContent = text || "";
+    }
+
+    function setConnected(ok) {
+      $("mqttDot").className = `dot ${ok ? "ok" : "bad"}`;
+      $("mqttText").textContent = ok ? "MQTT 已连接" : "MQTT 未连接";
+    }
+
+    function publish(name, payload) {
+      if (!state.mqtt?.connected) {
+        if (state.activated) setMessage("MQTT 未连接，请稍后再试");
+        else setLoading("MQTT 未连接，请稍后再试。");
+        return false;
+      }
+      state.mqtt.publish(requestTopic(name), JSON.stringify({ ...payload, clientId }), { qos: 1, retain: false });
+      return true;
+    }
+
+    function updateButtons(active = Boolean(state.token)) {
+      $("accountBtn").disabled = !active;
+      $("codeBtn").disabled = !active;
+    }
+
+    function updateView() {
+      $("phoneValue").textContent = state.phone || "-";
+      $("codeValue").textContent = state.code || "-";
+      renderCountdown();
+      updateButtons();
+    }
+
+    function renderCountdown() {
+      if (!state.leaseExpiresAt || state.leaseExpiresAt <= Date.now() || state.code) {
+        $("countdownValue").textContent = "-";
+        return;
+      }
+      $("countdownValue").textContent = `${Math.ceil((state.leaseExpiresAt - Date.now()) / 1000)}s`;
+    }
+
+    function copy(text) {
+      const value = String(text || "").trim();
+      if (value && navigator.clipboard?.writeText) navigator.clipboard.writeText(value).catch(() => {});
+    }
+
+    function activateLink() {
+      setLoading("正在核对链接...");
+      publish("auth/request", { requestId: requestId("auth"), cardKey });
+    }
+
+    function handleAuthResult(payload) {
+      if (!payload.ok) {
+        state.token = "";
+        show404();
+        return;
+      }
+      state.token = payload.token || "";
+      state.activated = true;
+      showCardPanel();
+      updateButtons(true);
+      setMessage("链接已核对，可以获取号码。");
+    }
+
+    function handleAccountResult(payload) {
+      if (!payload.ok) {
+        setMessage(payload.message || "获取号码失败");
+        return;
+      }
+      state.phone = payload.phone || "";
+      state.leaseExpiresAt = Number(payload.leaseExpiresAt || payload.leaseExpiresAtMs || 0);
+      setMessage(payload.message || "号码已获取，发送验证码后点击查验证码");
+      updateView();
+      copy(state.phone);
+    }
+
+    function handleCodeResult(payload) {
+      if (payload.code) {
+        state.code = payload.code;
+        setMessage(payload.smsContent || "验证码已收到");
+        updateView();
+        copy(state.code);
+        return;
+      }
+      setMessage(payload.message || "暂未收到验证码");
+      updateView();
+    }
+
+    function connect() {
+      if (!cardKey) {
+        show404();
+        return;
+      }
+      state.mqtt = mqtt.connect(CONFIG.mqttUrl, {
+        username: CONFIG.username,
+        password: CONFIG.password,
+        clientId,
+        clean: true,
+        reconnectPeriod: 3000,
+      });
+      state.mqtt.on("connect", () => {
+        setConnected(true);
+        [topic("auth/result"), topic("account/result"), topic("code/result")].forEach(name => state.mqtt.subscribe(name, { qos: 1 }));
+        activateLink();
+      });
+      state.mqtt.on("close", () => setConnected(false));
+      state.mqtt.on("error", () => setConnected(false));
+      state.mqtt.on("message", (name, buffer) => {
+        let payload = {};
+        try { payload = JSON.parse(buffer.toString()); } catch {}
+        if (name === topic("auth/result")) handleAuthResult(payload);
+        if (name === topic("account/result")) handleAccountResult(payload);
+        if (name === topic("code/result")) handleCodeResult(payload);
+      });
+    }
+
+    $("accountBtn").addEventListener("click", () => {
+      setMessage("正在获取号码...");
+      publish("account/request", { requestId: requestId("account"), cardKey, token: state.token });
+    });
+
+    $("codeBtn").addEventListener("click", () => {
+      setMessage("正在查询验证码...");
+      publish("code/request", { requestId: requestId("code"), cardKey, token: state.token });
+    });
+
+    $("phoneValue").addEventListener("click", () => copy(state.phone));
+    $("codeValue").addEventListener("click", () => copy(state.code));
+    state.countdownTimer = setInterval(renderCountdown, 1000);
+    connect();
+  </script>
+</body>
+</html>
