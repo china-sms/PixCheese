@@ -16,7 +16,7 @@
     .load-failed{width:min(360px,100%);text-align:center;background:#fff;color:#172033;border-radius:10px;padding:28px 18px;box-shadow:0 8px 30px rgba(15,23,42,.12)}
     .load-failed h1{font-size:24px;line-height:1.2;margin:0;font-weight:900}
     .load-failed p{margin:12px 0 0;color:#64748b;font-size:14px;line-height:1.5}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+    .grid{display:grid;grid-template-columns:1fr;gap:7px;margin-top:10px}
     button{height:40px;border:1px solid #2563eb;border-radius:7px;background:#2563eb;color:#fff;font-size:14px;font-weight:800}
     button:disabled{opacity:.55}
     .secondary{background:#fff;color:#2563eb}
@@ -47,7 +47,7 @@
       <p class="muted">通过 EMQX 安全通道获取号码和验证码</p>
       <div class="grid">
         <button id="accountBtn" disabled>获取号码</button>
-        <button id="codeBtn" class="secondary" disabled>查验证码</button>
+        <button id="codeBtn" class="secondary hidden" disabled>查验证码</button>
       </div>
       <section class="panel">
         <div class="notice hidden" id="noticeValue"></div>
@@ -83,8 +83,6 @@
       leaseExpiresAt: 0,
       retryAt: 0,
       countdownTimer: null,
-      retryCheckTimer: null,
-      retryCheckSent: false,
       authTimer: null,
       activated: false,
       completed: false,
@@ -174,7 +172,7 @@
       const enabled = Boolean(active && !state.completed);
       $("accountBtn").textContent = state.awaitingRetry ? "重新获取" : "获取号码";
       $("accountBtn").disabled = !enabled;
-      $("codeBtn").disabled = !enabled || state.awaitingRetry || !state.phone;
+      $("codeBtn").disabled = true;
     }
 
     function updateView() {
@@ -208,8 +206,7 @@
         return;
       }
       if (state.retryAt && state.retryAt <= now && !state.completed) {
-        $("countdownValue").textContent = state.awaitingRetry ? "请重新获取" : "确认中";
-        if (!state.awaitingRetry) triggerRetryCheck();
+        $("countdownValue").textContent = "确认中";
         return;
       }
       if (!state.leaseExpiresAt) {
@@ -222,27 +219,6 @@
     function copy(text) {
       const value = String(text || "").trim();
       if (value && navigator.clipboard?.writeText) navigator.clipboard.writeText(value).catch(() => {});
-    }
-
-    function clearRetryCheck() {
-      clearTimeout(state.retryCheckTimer);
-      state.retryCheckTimer = null;
-    }
-
-    function scheduleRetryCheck() {
-      clearRetryCheck();
-      state.retryCheckSent = false;
-      if (!state.retryAt || state.retryAt <= 0 || !state.phone || state.code || state.completed) return;
-      const delay = Math.max(0, state.retryAt - Date.now() + 250);
-      state.retryCheckTimer = setTimeout(triggerRetryCheck, delay);
-    }
-
-    function triggerRetryCheck() {
-      if (state.retryCheckSent || state.awaitingRetry || state.completed || state.code || !state.phone) return;
-      state.retryCheckSent = true;
-      clearRetryCheck();
-      setMessage("正在通过 EMQX 确认验证码...");
-      publish("code/request", { requestId: requestId("retry"), cardKey, token: state.token, autoRetryCheck: true });
     }
 
     function activateLink() {
@@ -266,7 +242,6 @@
       state.activated = true;
       state.completed = false;
       state.awaitingRetry = false;
-      state.retryCheckSent = false;
       state.useLimit = Math.max(1, Number(payload.useLimit || 1));
       state.usedCount = Math.max(0, Number(payload.usedCount || 0));
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
@@ -296,8 +271,7 @@
       state.retryAt = Number(payload.retryAt || 0);
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
       setNotice("");
-      setMessage(payload.message || "号码已获取，发送验证码后点击查验证码");
-      scheduleRetryCheck();
+      setMessage("号码已获取，正在等待验证码");
       updateView();
       copy(state.phone);
     }
@@ -310,7 +284,6 @@
       if (!payload.ok && payload.reason === "maintenance") {
         state.completed = true;
         state.awaitingRetry = false;
-        clearRetryCheck();
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
         state.leaseExpiresAt = 0;
         state.retryAt = 0;
@@ -321,7 +294,6 @@
       if (!payload.ok && payload.reason === "change_phone") {
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
         state.awaitingRetry = true;
-        clearRetryCheck();
         state.phone = "";
         state.leaseExpiresAt = 0;
         state.retryAt = 0;
@@ -332,7 +304,6 @@
       if (!payload.ok && payload.reason === "retry_phone") {
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
         state.awaitingRetry = true;
-        clearRetryCheck();
         state.retryAt = Number(payload.retryAt || state.retryAt || 0);
         setNotice("点击重新获取换新号码。");
         setMessage("请重新获取");
@@ -343,7 +314,6 @@
         state.code = payload.code;
         state.completed = true;
         state.awaitingRetry = false;
-        clearRetryCheck();
         state.useLimit = Math.max(1, Number(payload.useLimit || state.useLimit || 1));
         state.usedCount = Math.max(0, Number(payload.usedCount || state.usedCount || 0));
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
@@ -357,8 +327,7 @@
       }
       state.retryAt = Number(payload.retryAt || state.retryAt || 0);
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
-      setMessage(payload.message || "暂未收到验证码");
-      scheduleRetryCheck();
+      setMessage("正在等待验证码");
       updateView();
     }
 
