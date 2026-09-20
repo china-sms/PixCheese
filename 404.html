@@ -25,6 +25,7 @@
     .row span{color:#64748b;font-size:12px}
     .row strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .code{color:#2563eb;font-size:22px;letter-spacing:0}
+    .notice{margin-bottom:9px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;color:#1d4ed8;padding:8px 9px;font-size:13px;font-weight:800;line-height:1.35;text-align:center}
     .message{margin-top:9px;min-height:54px;border:1px solid #e5e7eb;border-radius:7px;background:#f8fafc;padding:9px;font-size:13px;line-height:1.4;color:#334155;word-break:break-word}
     .status{display:inline-flex;align-items:center;gap:6px;color:#64748b;font-size:12px;margin-top:10px}
     .dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1}
@@ -36,8 +37,8 @@
   <main class="app" id="appShell">
     <section id="loadingPanel">
       <h1>像素吐司</h1>
-      <p class="muted">正在核对链接...</p>
-      <div class="message" id="loadingMessage">正在连接 EMQX 安全通道。</div>
+      <p class="muted">加载中</p>
+      <div class="message" id="loadingMessage">正在核对链接...</div>
       <div class="status"><i class="dot" id="mqttDot"></i><b id="mqttText">MQTT 连接中</b></div>
     </section>
 
@@ -49,6 +50,7 @@
         <button id="codeBtn" class="secondary" disabled>查验证码</button>
       </div>
       <section class="panel">
+        <div class="notice hidden" id="noticeValue"></div>
         <div class="row"><span>手机号</span><strong id="phoneValue">-</strong></div>
         <div class="row"><span>验证码</span><strong id="codeValue" class="code">-</strong></div>
         <div class="row"><span>剩余</span><strong id="countdownValue">-</strong></div>
@@ -82,6 +84,9 @@
       countdownTimer: null,
       authTimer: null,
       activated: false,
+      completed: false,
+      useLimit: 1,
+      usedCount: 0,
     };
 
     const $ = id => document.getElementById(id);
@@ -140,6 +145,11 @@
       $("messageValue").textContent = text || "";
     }
 
+    function setNotice(text) {
+      $("noticeValue").textContent = text || "";
+      $("noticeValue").classList.toggle("hidden", !text);
+    }
+
     function setConnected(ok) {
       $("mqttDot").className = `dot ${ok ? "ok" : "bad"}`;
       $("mqttText").textContent = ok ? "MQTT 已连接" : "MQTT 未连接";
@@ -156,8 +166,9 @@
     }
 
     function updateButtons(active = Boolean(state.token)) {
-      $("accountBtn").disabled = !active;
-      $("codeBtn").disabled = !active;
+      const enabled = Boolean(active && !state.completed);
+      $("accountBtn").disabled = !enabled;
+      $("codeBtn").disabled = !enabled;
     }
 
     function updateView() {
@@ -199,6 +210,10 @@
       }
       state.token = payload.token || "";
       state.activated = true;
+      state.completed = false;
+      state.useLimit = Math.max(1, Number(payload.useLimit || 1));
+      state.usedCount = Math.max(0, Number(payload.usedCount || 0));
+      setNotice("");
       showCardPanel();
       updateButtons(true);
       setMessage("链接已核对，可以获取号码。");
@@ -210,15 +225,28 @@
         return;
       }
       state.phone = payload.phone || "";
+      state.code = "";
+      state.completed = false;
       state.leaseExpiresAt = Number(payload.leaseExpiresAt || payload.leaseExpiresAtMs || 0);
+      setNotice("");
       setMessage(payload.message || "号码已获取，发送验证码后点击查验证码");
       updateView();
       copy(state.phone);
     }
 
     function handleCodeResult(payload) {
+      if (!payload.ok && payload.reason === "used") {
+        showFailed("已使用", "请联系客服。");
+        return;
+      }
       if (payload.code) {
         state.code = payload.code;
+        state.completed = true;
+        state.useLimit = Math.max(1, Number(payload.useLimit || state.useLimit || 1));
+        state.usedCount = Math.max(0, Number(payload.usedCount || state.usedCount || 0));
+        const fallbackRemaining = Math.max(0, state.useLimit - state.usedCount);
+        const remainingUses = Number.isFinite(Number(payload.remainingUses)) ? Math.max(0, Number(payload.remainingUses)) : fallbackRemaining;
+        setNotice(remainingUses > 0 ? "再次打开或者刷新再次使用。" : "使用结束！欢迎再次光临！");
         setMessage(payload.smsContent || "验证码已收到");
         updateView();
         copy(state.code);
