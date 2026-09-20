@@ -81,12 +81,14 @@
       phone: "",
       code: "",
       leaseExpiresAt: 0,
+      retryAt: 0,
       countdownTimer: null,
       authTimer: null,
       activated: false,
       completed: false,
       useLimit: 1,
       usedCount: 0,
+      timeoutCount: 0,
     };
 
     const $ = id => document.getElementById(id);
@@ -179,11 +181,34 @@
     }
 
     function renderCountdown() {
-      if (!state.leaseExpiresAt || state.leaseExpiresAt <= Date.now() || state.code) {
+      const now = Date.now();
+      if (state.code) {
         $("countdownValue").textContent = "-";
         return;
       }
-      $("countdownValue").textContent = `${Math.ceil((state.leaseExpiresAt - Date.now()) / 1000)}s`;
+      if (state.leaseExpiresAt && state.leaseExpiresAt <= now) {
+        $("countdownValue").textContent = "-";
+        if (!state.completed) {
+          if (state.timeoutCount >= 1) {
+            state.completed = true;
+            setMessage("系统正在维护，请联系客服");
+            updateButtons(false);
+          } else {
+            setMessage("请更换新号码");
+          }
+        }
+        return;
+      }
+      if (state.retryAt && state.retryAt <= now && !state.completed) {
+        $("countdownValue").textContent = "请重新获取";
+        setMessage("请重新获取");
+        return;
+      }
+      if (!state.leaseExpiresAt) {
+        $("countdownValue").textContent = "-";
+        return;
+      }
+      $("countdownValue").textContent = `${Math.ceil((state.leaseExpiresAt - now) / 1000)}s`;
     }
 
     function copy(text) {
@@ -213,6 +238,7 @@
       state.completed = false;
       state.useLimit = Math.max(1, Number(payload.useLimit || 1));
       state.usedCount = Math.max(0, Number(payload.usedCount || 0));
+      state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
       setNotice("");
       showCardPanel();
       updateButtons(true);
@@ -221,6 +247,13 @@
 
     function handleAccountResult(payload) {
       if (!payload.ok) {
+        state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
+        if (payload.reason === "maintenance") {
+          state.completed = true;
+          setMessage("系统正在维护，请联系客服");
+          updateView();
+          return;
+        }
         setMessage(payload.message || "获取号码失败");
         return;
       }
@@ -228,6 +261,8 @@
       state.code = "";
       state.completed = false;
       state.leaseExpiresAt = Number(payload.leaseExpiresAt || payload.leaseExpiresAtMs || 0);
+      state.retryAt = Number(payload.retryAt || 0);
+      state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
       setNotice("");
       setMessage(payload.message || "号码已获取，发送验证码后点击查验证码");
       updateView();
@@ -239,11 +274,36 @@
         showFailed("已使用", "请联系客服。");
         return;
       }
+      if (!payload.ok && payload.reason === "maintenance") {
+        state.completed = true;
+        state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
+        state.leaseExpiresAt = 0;
+        state.retryAt = 0;
+        setMessage("系统正在维护，请联系客服");
+        updateView();
+        return;
+      }
+      if (!payload.ok && payload.reason === "change_phone") {
+        state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
+        state.phone = "";
+        state.leaseExpiresAt = 0;
+        state.retryAt = 0;
+        setMessage("请更换新号码");
+        updateView();
+        return;
+      }
+      if (!payload.ok && payload.reason === "retry_phone") {
+        state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
+        setMessage("请重新获取");
+        updateView();
+        return;
+      }
       if (payload.code) {
         state.code = payload.code;
         state.completed = true;
         state.useLimit = Math.max(1, Number(payload.useLimit || state.useLimit || 1));
         state.usedCount = Math.max(0, Number(payload.usedCount || state.usedCount || 0));
+        state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
         const fallbackRemaining = Math.max(0, state.useLimit - state.usedCount);
         const remainingUses = Number.isFinite(Number(payload.remainingUses)) ? Math.max(0, Number(payload.remainingUses)) : fallbackRemaining;
         setNotice(remainingUses > 0 ? "再次打开或者刷新再次使用。" : "使用结束！欢迎再次光临！");
@@ -252,6 +312,8 @@
         copy(state.code);
         return;
       }
+      state.retryAt = Number(payload.retryAt || state.retryAt || 0);
+      state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
       setMessage(payload.message || "暂未收到验证码");
       updateView();
     }
