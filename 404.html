@@ -13,9 +13,9 @@
     h1{margin:0 0 4px;font-size:22px;line-height:1.15}
     .muted{margin:0 0 14px;color:#64748b;font-size:12px}
     .hidden{display:none!important}
-    .not-found{width:min(360px,100%);text-align:center;background:#0f172a;color:#e5e7eb;border-radius:10px;padding:28px 18px;box-shadow:0 8px 30px rgba(15,23,42,.16)}
-    .not-found h1{font-size:58px;line-height:1;margin:0;font-weight:900}
-    .not-found p{margin:12px 0 0;color:#94a3b8;font-size:14px;line-height:1.5}
+    .load-failed{width:min(360px,100%);text-align:center;background:#fff;color:#172033;border-radius:10px;padding:28px 18px;box-shadow:0 8px 30px rgba(15,23,42,.12)}
+    .load-failed h1{font-size:24px;line-height:1.2;margin:0;font-weight:900}
+    .load-failed p{margin:12px 0 0;color:#64748b;font-size:14px;line-height:1.5}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
     button{height:40px;border:1px solid #2563eb;border-radius:7px;background:#2563eb;color:#fff;font-size:14px;font-weight:800}
     button:disabled{opacity:.55}
@@ -58,9 +58,9 @@
     </section>
   </main>
 
-  <section class="not-found hidden" id="notFoundPanel">
-    <h1>404</h1>
-    <p>链接不存在或已失效。</p>
+  <section class="load-failed hidden" id="failedPanel">
+    <h1 id="failedTitle">加载失败</h1>
+    <p id="failedMessage">请联系客服。</p>
   </section>
 
   <script>
@@ -80,6 +80,7 @@
       code: "",
       leaseExpiresAt: 0,
       countdownTimer: null,
+      authTimer: null,
       activated: false,
     };
 
@@ -106,9 +107,11 @@
       return String(value || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 200);
     }
 
-    function show404() {
+    function showFailed(title = "加载失败", message = "请联系客服。") {
+      $("failedTitle").textContent = title;
+      $("failedMessage").textContent = message;
       $("appShell").classList.add("hidden");
-      $("notFoundPanel").classList.remove("hidden");
+      $("failedPanel").classList.remove("hidden");
       try { state.mqtt?.end?.(true); } catch {}
     }
 
@@ -179,13 +182,19 @@
 
     function activateLink() {
       setLoading("正在核对链接...");
+      clearTimeout(state.authTimer);
+      state.authTimer = setTimeout(() => {
+        if (!state.activated) showFailed();
+      }, 12000);
       publish("auth/request", { requestId: requestId("auth"), cardKey });
     }
 
     function handleAuthResult(payload) {
+      clearTimeout(state.authTimer);
       if (!payload.ok) {
         state.token = "";
-        show404();
+        if (payload.reason === "used") showFailed("已使用", "请联系客服。");
+        else showFailed("加载失败", "请联系客服。");
         return;
       }
       state.token = payload.token || "";
@@ -221,7 +230,7 @@
 
     function connect() {
       if (!cardKey) {
-        show404();
+        showFailed();
         return;
       }
       state.mqtt = mqtt.connect(CONFIG.mqttUrl, {
