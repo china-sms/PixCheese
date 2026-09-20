@@ -192,28 +192,16 @@
         $("countdownValue").textContent = "请重新获取";
         return;
       }
-      if (state.leaseExpiresAt && state.leaseExpiresAt <= now) {
-        $("countdownValue").textContent = "-";
-        if (!state.completed) {
-          if (state.timeoutCount >= 1) {
-            state.completed = true;
-            setMessage("系统正在维护，请联系客服");
-            updateButtons(false);
-          } else {
-            setMessage("请更换新号码");
-          }
-        }
-        return;
-      }
       if (state.retryAt && state.retryAt <= now && !state.completed) {
         $("countdownValue").textContent = "确认中";
         return;
       }
-      if (!state.leaseExpiresAt) {
+      const countdownTarget = state.retryAt || state.leaseExpiresAt;
+      if (!countdownTarget) {
         $("countdownValue").textContent = "-";
         return;
       }
-      $("countdownValue").textContent = `${Math.ceil((state.leaseExpiresAt - now) / 1000)}s`;
+      $("countdownValue").textContent = `${Math.max(0, Math.ceil((countdownTarget - now) / 1000))}s`;
     }
 
     function copy(text) {
@@ -271,7 +259,7 @@
       state.retryAt = Number(payload.retryAt || 0);
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
       setNotice("");
-      setMessage("号码已获取，正在等待验证码");
+      setMessage("");
       updateView();
       copy(state.phone);
     }
@@ -288,16 +276,6 @@
         state.leaseExpiresAt = 0;
         state.retryAt = 0;
         setMessage("系统正在维护，请联系客服");
-        updateView();
-        return;
-      }
-      if (!payload.ok && payload.reason === "change_phone") {
-        state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
-        state.awaitingRetry = true;
-        state.phone = "";
-        state.leaseExpiresAt = 0;
-        state.retryAt = 0;
-        setMessage("请更换新号码");
         updateView();
         return;
       }
@@ -327,7 +305,7 @@
       }
       state.retryAt = Number(payload.retryAt || state.retryAt || 0);
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
-      setMessage("正在等待验证码");
+      setMessage("");
       updateView();
     }
 
