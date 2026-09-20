@@ -83,9 +83,12 @@
       leaseExpiresAt: 0,
       retryAt: 0,
       countdownTimer: null,
+      retryCheckTimer: null,
+      retryCheckSent: false,
       authTimer: null,
       activated: false,
       completed: false,
+      awaitingRetry: false,
       useLimit: 1,
       usedCount: 0,
       timeoutCount: 0,
@@ -169,8 +172,9 @@
 
     function updateButtons(active = Boolean(state.token)) {
       const enabled = Boolean(active && !state.completed);
+      $("accountBtn").textContent = state.awaitingRetry ? "重新获取" : "获取号码";
       $("accountBtn").disabled = !enabled;
-      $("codeBtn").disabled = !enabled;
+      $("codeBtn").disabled = !enabled || state.awaitingRetry || !state.phone;
     }
 
     function updateView() {
@@ -184,6 +188,10 @@
       const now = Date.now();
       if (state.code) {
         $("countdownValue").textContent = "-";
+        return;
+      }
+      if (state.awaitingRetry) {
+        $("countdownValue").textContent = "请重新获取";
         return;
       }
       if (state.leaseExpiresAt && state.leaseExpiresAt <= now) {
@@ -200,8 +208,8 @@
         return;
       }
       if (state.retryAt && state.retryAt <= now && !state.completed) {
-        $("countdownValue").textContent = "请重新获取";
-        setMessage("请重新获取");
+        $("countdownValue").textContent = state.awaitingRetry ? "请重新获取" : "确认中";
+        if (!state.awaitingRetry) triggerRetryCheck();
         return;
       }
       if (!state.leaseExpiresAt) {
@@ -214,6 +222,27 @@
     function copy(text) {
       const value = String(text || "").trim();
       if (value && navigator.clipboard?.writeText) navigator.clipboard.writeText(value).catch(() => {});
+    }
+
+    function clearRetryCheck() {
+      clearTimeout(state.retryCheckTimer);
+      state.retryCheckTimer = null;
+    }
+
+    function scheduleRetryCheck() {
+      clearRetryCheck();
+      state.retryCheckSent = false;
+      if (!state.retryAt || state.retryAt <= 0 || !state.phone || state.code || state.completed) return;
+      const delay = Math.max(0, state.retryAt - Date.now() + 250);
+      state.retryCheckTimer = setTimeout(triggerRetryCheck, delay);
+    }
+
+    function triggerRetryCheck() {
+      if (state.retryCheckSent || state.awaitingRetry || state.completed || state.code || !state.phone) return;
+      state.retryCheckSent = true;
+      clearRetryCheck();
+      setMessage("正在通过 EMQX 确认验证码...");
+      publish("code/request", { requestId: requestId("retry"), cardKey, token: state.token, autoRetryCheck: true });
     }
 
     function activateLink() {
@@ -236,6 +265,8 @@
       state.token = payload.token || "";
       state.activated = true;
       state.completed = false;
+      state.awaitingRetry = false;
+      state.retryCheckSent = false;
       state.useLimit = Math.max(1, Number(payload.useLimit || 1));
       state.usedCount = Math.max(0, Number(payload.usedCount || 0));
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
@@ -260,11 +291,13 @@
       state.phone = payload.phone || "";
       state.code = "";
       state.completed = false;
+      state.awaitingRetry = false;
       state.leaseExpiresAt = Number(payload.leaseExpiresAt || payload.leaseExpiresAtMs || 0);
       state.retryAt = Number(payload.retryAt || 0);
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
       setNotice("");
       setMessage(payload.message || "号码已获取，发送验证码后点击查验证码");
+      scheduleRetryCheck();
       updateView();
       copy(state.phone);
     }
@@ -276,6 +309,8 @@
       }
       if (!payload.ok && payload.reason === "maintenance") {
         state.completed = true;
+        state.awaitingRetry = false;
+        clearRetryCheck();
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
         state.leaseExpiresAt = 0;
         state.retryAt = 0;
@@ -285,6 +320,8 @@
       }
       if (!payload.ok && payload.reason === "change_phone") {
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
+        state.awaitingRetry = true;
+        clearRetryCheck();
         state.phone = "";
         state.leaseExpiresAt = 0;
         state.retryAt = 0;
@@ -294,6 +331,10 @@
       }
       if (!payload.ok && payload.reason === "retry_phone") {
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
+        state.awaitingRetry = true;
+        clearRetryCheck();
+        state.retryAt = Number(payload.retryAt || state.retryAt || 0);
+        setNotice("点击重新获取换新号码。");
         setMessage("请重新获取");
         updateView();
         return;
@@ -301,6 +342,8 @@
       if (payload.code) {
         state.code = payload.code;
         state.completed = true;
+        state.awaitingRetry = false;
+        clearRetryCheck();
         state.useLimit = Math.max(1, Number(payload.useLimit || state.useLimit || 1));
         state.usedCount = Math.max(0, Number(payload.usedCount || state.usedCount || 0));
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
@@ -315,6 +358,7 @@
       state.retryAt = Number(payload.retryAt || state.retryAt || 0);
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
       setMessage(payload.message || "暂未收到验证码");
+      scheduleRetryCheck();
       updateView();
     }
 
@@ -347,7 +391,7 @@
     }
 
     $("accountBtn").addEventListener("click", () => {
-      setMessage("正在获取号码...");
+      setMessage(state.awaitingRetry ? "正在重新获取号码..." : "正在获取号码...");
       publish("account/request", { requestId: requestId("account"), cardKey, token: state.token });
     });
 
