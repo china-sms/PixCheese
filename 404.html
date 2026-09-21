@@ -9,26 +9,30 @@
     *{box-sizing:border-box}
     html,body{min-height:100%;margin:0;background:#eef2f6;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
     body{display:flex;align-items:flex-start;justify-content:center;padding:18px 10px}
-    .app{width:min(430px,100%);background:#fff;border-radius:10px;padding:14px;box-shadow:0 8px 30px rgba(15,23,42,.08)}
+    .app{width:min(430px,100%);background:#fff;border-radius:8px;padding:12px;box-shadow:0 8px 30px rgba(15,23,42,.08)}
     h1{margin:0 0 4px;font-size:22px;line-height:1.15}
     .muted{margin:0 0 14px;color:#64748b;font-size:12px}
     .hidden{display:none!important}
     .load-failed{width:min(360px,100%);text-align:center;background:#fff;color:#172033;border-radius:10px;padding:28px 18px;box-shadow:0 8px 30px rgba(15,23,42,.12)}
     .load-failed h1{font-size:24px;line-height:1.2;margin:0;font-weight:900}
     .load-failed p{margin:12px 0 0;color:#64748b;font-size:14px;line-height:1.5}
-    button{height:40px;border:1px solid #2563eb;border-radius:7px;background:#2563eb;color:#fff;font-size:14px;font-weight:800}
+    button{height:36px;border:1px solid #2563eb;border-radius:6px;background:#2563eb;color:#fff;font-size:14px;font-weight:800}
     button:disabled{opacity:.55}
     .secondary{background:#fff;color:#2563eb}
     .panel{padding-top:2px}
-    .row{display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center;min-height:34px;font-size:14px}
-    .row span{color:#64748b;font-size:12px}
-    .row strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .phone-row{grid-template-columns:64px minmax(0,1fr) 92px}
+    .code-table{width:100%;border-collapse:collapse;table-layout:fixed;border:1px solid #dbe3ee;border-radius:7px;overflow:hidden;background:#fff}
+    .code-table th,.code-table td{border-top:1px solid #e5edf6;padding:8px 7px;text-align:left;vertical-align:middle}
+    .code-table tr:first-child th,.code-table tr:first-child td{border-top:0}
+    .code-table th{width:72px;background:#f8fafc;color:#475569;font-size:12px;font-weight:900;white-space:nowrap}
+    .value-cell{min-width:0}
+    .value-cell strong{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px;color:#111827}
+    .action-cell{width:94px;padding-left:0}
+    .action-cell button{width:100%;height:34px;font-size:13px}
     .code{color:#2563eb;font-size:22px;letter-spacing:0}
     .code.empty{color:#64748b;font-size:14px}
     .usage-badge{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:24px;margin:0 0 8px;border-radius:999px;background:#0f172a;color:#fff;font-size:14px;font-weight:900}
     .notice{margin-bottom:9px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;color:#1d4ed8;padding:8px 9px;font-size:13px;font-weight:800;line-height:1.35;text-align:center}
-    .message{margin-top:9px;min-height:54px;border:1px solid #e5e7eb;border-radius:7px;background:#f8fafc;padding:9px;font-size:13px;line-height:1.4;color:#334155;word-break:break-word}
+    .message{margin-top:9px;min-height:38px;border:1px solid #e5e7eb;border-radius:7px;background:#f8fafc;padding:9px;font-size:13px;line-height:1.4;color:#334155;word-break:break-word}
     .status{display:inline-flex;align-items:center;gap:6px;color:#64748b;font-size:12px;margin-top:10px}
     .dot{width:8px;height:8px;border-radius:50%;background:#cbd5e1}
     .dot.ok{background:#15803d}
@@ -47,9 +51,23 @@
       <div class="usage-badge hidden" id="usageBadge">-1</div>
       <section class="panel">
         <div class="notice hidden" id="noticeValue"></div>
-        <div class="row phone-row"><span>手机号</span><strong id="phoneValue">有时效，打开软件再获取。</strong><button id="accountBtn" disabled>获取号码</button></div>
-        <div class="row"><span>验证码</span><strong id="codeValue" class="code empty">等待获取。</strong></div>
-        <div class="row"><span>倒计时</span><strong id="countdownValue">-</strong></div>
+        <table class="code-table" aria-label="接码信息">
+          <tbody>
+            <tr>
+              <th>手机号</th>
+              <td class="value-cell"><strong id="phoneValue">有时效，打开软件再获取。</strong></td>
+              <td class="action-cell"><button id="accountBtn" disabled>获取号码</button></td>
+            </tr>
+            <tr>
+              <th>验证码</th>
+              <td class="value-cell" colspan="2"><strong id="codeValue" class="code empty">等待获取。</strong></td>
+            </tr>
+            <tr>
+              <th>倒计时</th>
+              <td class="value-cell" colspan="2"><strong id="countdownValue">-</strong></td>
+            </tr>
+          </tbody>
+        </table>
         <button id="codeBtn" class="secondary hidden" disabled>查验证码</button>
         <div class="message hidden" id="messageValue"></div>
         <div class="status hidden"><i class="dot ok"></i><b>链接已核对</b></div>
