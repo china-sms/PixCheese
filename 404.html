@@ -45,7 +45,7 @@
   <main class="app" id="appShell">
     <section id="loadingPanel">
       <p class="muted">加载中</p>
-      <div class="message" id="loadingMessage">正在核对链接...</div>
+      <div class="message" id="loadingMessage">正在核对链接</div>
       <div class="status hidden"><i class="dot" id="mqttDot"></i><b id="mqttText">MQTT 连接中</b></div>
     </section>
 
@@ -54,8 +54,8 @@
       <section class="panel">
         <div class="note-box">
           <div class="note-title">操作说明：</div>
-          <div>因号码有时效性。</div>
-          <div>请在获取前先打开软件。</div>
+          <div>因号码有时效性</div>
+          <div>请在获取前先打开软件</div>
           <div>有问题及时联系客服</div>
         </div>
         <div class="notice hidden" id="noticeValue"></div>
@@ -63,16 +63,12 @@
           <tbody>
             <tr>
               <th>手机号</th>
-              <td class="value-cell"><strong id="phoneValue">有时效，打开软件再获取。</strong></td>
+              <td class="value-cell"><strong id="phoneValue">有时效，打开软件再获取</strong></td>
               <td class="action-cell"><button id="accountBtn" disabled>获取号码</button></td>
             </tr>
             <tr>
               <th>验证码</th>
-              <td class="value-cell" colspan="2"><strong id="codeValue" class="code empty">等待获取。</strong></td>
-            </tr>
-            <tr>
-              <th>倒计时</th>
-              <td class="value-cell" colspan="2"><strong id="countdownValue">-</strong></td>
+              <td class="value-cell" colspan="2"><strong id="codeValue" class="code empty">等待获取</strong></td>
             </tr>
           </tbody>
         </table>
@@ -85,7 +81,7 @@
 
   <section class="load-failed hidden" id="failedPanel">
     <h1 id="failedTitle">加载失败</h1>
-    <p id="failedMessage">请联系客服。</p>
+    <p id="failedMessage">请联系客服</p>
   </section>
 
   <script>
@@ -138,7 +134,7 @@
       return String(value || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 200);
     }
 
-    function showFailed(title = "加载失败", message = "请联系客服。") {
+    function showFailed(title = "加载失败", message = "请联系客服") {
       $("failedTitle").textContent = title;
       $("failedMessage").textContent = message;
       $("appShell").classList.add("hidden");
@@ -190,7 +186,7 @@
     function publish(name, payload) {
       if (!state.mqtt?.connected) {
         if (state.activated) setMessage("MQTT 未连接，请稍后再试");
-        else setLoading("MQTT 未连接，请稍后再试。");
+        else setLoading("MQTT 未连接，请稍后再试");
         return false;
       }
       state.mqtt.publish(requestTopic(name), JSON.stringify({ ...payload, clientId }), { qos: 1, retain: false });
@@ -205,9 +201,7 @@
     }
 
     function updateView() {
-      $("phoneValue").textContent = state.phone || "有时效，打开软件再获取。";
-      $("codeValue").textContent = state.code || "等待获取。";
-      $("codeValue").classList.toggle("empty", !state.code);
+      $("phoneValue").textContent = state.phone || "有时效，打开软件再获取";
       updateUsageBadge();
       renderCountdown();
       updateButtons();
@@ -216,23 +210,25 @@
     function renderCountdown() {
       const now = Date.now();
       if (state.code) {
-        $("countdownValue").textContent = "-";
+        $("codeValue").textContent = state.code;
+        $("codeValue").classList.remove("empty");
         return;
       }
+      $("codeValue").classList.add("empty");
       if (state.awaitingRetry) {
-        $("countdownValue").textContent = "请重新获取";
+        $("codeValue").textContent = "请重新获取";
         return;
       }
       if (state.retryAt && state.retryAt <= now && !state.completed) {
-        $("countdownValue").textContent = "确认中";
+        $("codeValue").textContent = "确认中";
         return;
       }
       const countdownTarget = state.retryAt || state.leaseExpiresAt;
       if (!countdownTarget) {
-        $("countdownValue").textContent = "-";
+        $("codeValue").textContent = "等待获取";
         return;
       }
-      $("countdownValue").textContent = `${Math.max(0, Math.ceil((countdownTarget - now) / 1000))}s`;
+      $("codeValue").textContent = `${Math.max(0, Math.ceil((countdownTarget - now) / 1000))}s`;
     }
 
     function copy(text) {
@@ -241,7 +237,7 @@
     }
 
     function activateLink() {
-      setLoading("正在核对链接...");
+      setLoading("正在核对链接");
       clearTimeout(state.authTimer);
       state.authTimer = setTimeout(() => {
         if (!state.activated) showFailed();
@@ -253,8 +249,8 @@
       clearTimeout(state.authTimer);
       if (!payload.ok) {
         state.token = "";
-        if (payload.reason === "used") showFailed("已使用", "请联系客服。");
-        else showFailed("加载失败", "请联系客服。");
+        if (payload.reason === "used") showFailed("已使用", "请联系客服");
+        else showFailed("加载失败", "请联系客服");
         return;
       }
       state.token = payload.token || "";
@@ -311,7 +307,7 @@
 
     function handleCodeResult(payload) {
       if (!payload.ok && payload.reason === "used") {
-        showFailed("已使用", "请联系客服。");
+        showFailed("已使用", "请联系客服");
         return;
       }
       if (!payload.ok && payload.reason === "maintenance") {
@@ -328,7 +324,7 @@
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
         state.awaitingRetry = true;
         state.retryAt = Number(payload.retryAt || state.retryAt || 0);
-        setNotice("点击重新获取换新号码。");
+        setNotice("点击重新获取换新号码");
         setMessage("请重新获取");
         updateView();
         return;
@@ -342,7 +338,7 @@
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
         const fallbackRemaining = Math.max(0, state.useLimit - state.usedCount);
         const remainingUses = Number.isFinite(Number(payload.remainingUses)) ? Math.max(0, Number(payload.remainingUses)) : fallbackRemaining;
-        setNotice(remainingUses > 0 ? "再次打开或者刷新再次使用。" : "使用结束！欢迎再次光临！");
+        setNotice(remainingUses > 0 ? "再次打开或者刷新再次使用" : "使用结束！欢迎再次光临！");
         setMessage(payload.smsContent || "验证码已收到");
         updateView();
         copy(state.code);
@@ -383,12 +379,12 @@
     }
 
     $("accountBtn").addEventListener("click", () => {
-      setMessage(state.awaitingRetry ? "正在重新获取号码..." : "正在获取号码...");
+      setMessage(state.awaitingRetry ? "正在重新获取号码" : "正在获取号码");
       publish("account/request", { requestId: requestId("account"), cardKey, token: state.token });
     });
 
     $("codeBtn").addEventListener("click", () => {
-      setMessage("正在查询验证码...");
+      setMessage("正在查询验证码");
       publish("code/request", { requestId: requestId("code"), cardKey, token: state.token });
     });
 
