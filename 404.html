@@ -328,7 +328,7 @@
         state.timeoutCount = Math.max(0, Number(payload.timeoutCount || state.timeoutCount || 0));
         state.awaitingRetry = true;
         state.retryAt = Number(payload.retryAt || state.retryAt || 0);
-        setNotice("点击重新获取换新号码");
+        setNotice("点击重新获取");
         setMessage("请重新获取");
         updateView();
         return;
@@ -368,9 +368,8 @@
       state.retryAt = 0;
       state.usedCount = Math.max(0, Number(payload.usedCount || state.usedCount || 0));
       state.useLimit = Math.max(1, Number(payload.useLimit || state.useLimit || 1));
-      setMessage("正在重新获取号码");
+      setMessage(payload.message || "已终止，请重新获取");
       updateView();
-      publish("account/request", { requestId: requestId("restart_account"), cardKey, token: state.token });
     }
 
     function connect() {
@@ -414,7 +413,7 @@
 
     $("terminateBtn").addEventListener("click", () => {
       if (!state.phone || state.code) return;
-      setMessage("正在终止并重新获取");
+      setMessage("正在终止");
       $("terminateBtn").disabled = true;
       publish("terminate/request", { requestId: requestId("terminate"), cardKey, token: state.token });
     });
