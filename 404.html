@@ -63,7 +63,7 @@
           <tbody>
             <tr>
               <th>手机号</th>
-              <td class="value-cell"><strong id="phoneValue">有时效，打开软件再获取</strong></td>
+              <td class="value-cell"><strong id="phoneValue">等待获取</strong></td>
               <td class="action-cell"><button id="accountBtn" disabled>获取号码</button></td>
             </tr>
             <tr>
@@ -201,7 +201,7 @@
     }
 
     function updateView() {
-      $("phoneValue").textContent = state.phone || "有时效，打开软件再获取";
+      $("phoneValue").textContent = state.phone || "等待获取";
       updateUsageBadge();
       renderCountdown();
       updateButtons();
