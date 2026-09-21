@@ -264,11 +264,24 @@
       state.useLimit = Math.max(1, Number(payload.useLimit || 1));
       state.usedCount = Math.max(0, Number(payload.usedCount || 0));
       state.timeoutCount = Math.max(0, Number(payload.timeoutCount || 0));
+      const card = payload.card && typeof payload.card === "object" ? payload.card : {};
+      const restoredPhone = card.usedPhone || payload.phone || "";
+      const restoredCode = card.verifyCode || payload.code || "";
+      state.phone = restoredPhone || "";
+      state.code = restoredCode || "";
+      state.leaseExpiresAt = Number(card.leaseExpiresAtMs || payload.leaseExpiresAt || payload.leaseExpiresAtMs || 0);
+      state.retryAt = Number(payload.retryAt || card.leaseExpiresAtMs || 0);
+      state.awaitingRetry = card.retryReady === true;
+      state.completed = Boolean(restoredCode);
       setNotice("");
       showCardPanel();
       updateUsageBadge();
       updateButtons(true);
       setMessage("");
+      updateView();
+      if (restoredPhone && !restoredCode && !state.awaitingRetry) {
+        publish("account/request", { requestId: requestId("resume_account"), cardKey, token: state.token });
+      }
     }
 
     function handleAccountResult(payload) {
