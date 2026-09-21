@@ -28,9 +28,10 @@
     .value-cell strong{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px;color:#111827}
     .action-cell{width:94px;padding-left:0}
     .action-cell button{width:100%;height:34px;font-size:13px}
+    .button-row{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
+    .danger{background:#fff;color:#b91c1c;border-color:#fecaca}
     .code{color:#2563eb;font-size:22px;letter-spacing:0}
     .code.empty{color:#64748b;font-size:14px}
-    .usage-badge{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:24px;margin:0 0 8px;border-radius:999px;background:#0f172a;color:#fff;font-size:14px;font-weight:900}
     .note-box{margin-bottom:9px;border:1px solid #dbe3ee;border-radius:7px;background:#f8fafc;padding:8px 9px;color:#334155;font-size:13px;line-height:1.55}
     .note-title{font-weight:900;color:#111827;margin-bottom:2px}
     .notice{margin-bottom:9px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;color:#1d4ed8;padding:8px 9px;font-size:13px;font-weight:800;line-height:1.35;text-align:center}
@@ -50,7 +51,6 @@
     </section>
 
     <section id="cardPanel" class="hidden">
-      <div class="usage-badge hidden" id="usageBadge">-1</div>
       <section class="panel">
         <div class="note-box">
           <div class="note-title">操作说明：</div>
@@ -72,7 +72,10 @@
             </tr>
           </tbody>
         </table>
-        <button id="codeBtn" class="secondary hidden" disabled>查验证码</button>
+        <div class="button-row">
+          <button id="terminateBtn" class="danger" disabled>终止</button>
+          <button id="codeBtn" class="secondary hidden" disabled>查验证码</button>
+        </div>
         <div class="message hidden" id="messageValue"></div>
         <div class="status hidden"><i class="dot ok"></i><b>链接已核对</b></div>
       </section>
@@ -173,9 +176,11 @@
       $("noticeValue").classList.toggle("hidden", !text);
     }
 
-    function updateUsageBadge() {
-      const show = Number(state.useLimit || 1) >= 2 && Number(state.usedCount || 0) === 1 && !state.code;
-      $("usageBadge").classList.toggle("hidden", !show);
+    function usageText() {
+      const total = Math.max(1, Number(state.useLimit || 1));
+      const used = Math.max(0, Number(state.usedCount || 0));
+      const activeCurrent = state.phone && !state.code ? 1 : 0;
+      return `（${Math.max(0, Math.min(total, total - used + activeCurrent))}/${total}）`;
     }
 
     function setConnected(ok) {
@@ -197,12 +202,12 @@
       const enabled = Boolean(active && !state.completed);
       $("accountBtn").textContent = state.awaitingRetry ? "重新获取" : "获取号码";
       $("accountBtn").disabled = !enabled;
+      $("terminateBtn").disabled = !(active && state.phone && !state.code && !state.awaitingRetry && !state.completed);
       $("codeBtn").disabled = true;
     }
 
     function updateView() {
-      $("phoneValue").textContent = state.phone || "等待获取";
-      updateUsageBadge();
+      $("phoneValue").textContent = `${state.phone || "等待获取"}${usageText()}`;
       renderCountdown();
       updateButtons();
     }
@@ -271,7 +276,6 @@
       state.completed = Boolean(restoredCode);
       setNotice("");
       showCardPanel();
-      updateUsageBadge();
       updateButtons(true);
       setMessage("");
       updateView();
@@ -350,6 +354,25 @@
       updateView();
     }
 
+    function handleTerminateResult(payload) {
+      if (!payload.ok) {
+        setMessage(payload.message || "终止失败");
+        updateView();
+        return;
+      }
+      state.phone = "";
+      state.code = "";
+      state.completed = false;
+      state.awaitingRetry = false;
+      state.leaseExpiresAt = 0;
+      state.retryAt = 0;
+      state.usedCount = Math.max(0, Number(payload.usedCount || state.usedCount || 0));
+      state.useLimit = Math.max(1, Number(payload.useLimit || state.useLimit || 1));
+      setMessage("正在重新获取号码");
+      updateView();
+      publish("account/request", { requestId: requestId("restart_account"), cardKey, token: state.token });
+    }
+
     function connect() {
       if (!cardKey) {
         showFailed();
@@ -364,7 +387,7 @@
       });
       state.mqtt.on("connect", () => {
         setConnected(true);
-        [topic("auth/result"), topic("account/result"), topic("code/result")].forEach(name => state.mqtt.subscribe(name, { qos: 1 }));
+        [topic("auth/result"), topic("account/result"), topic("code/result"), topic("terminate/result")].forEach(name => state.mqtt.subscribe(name, { qos: 1 }));
         activateLink();
       });
       state.mqtt.on("close", () => setConnected(false));
@@ -375,6 +398,7 @@
         if (name === topic("auth/result")) handleAuthResult(payload);
         if (name === topic("account/result")) handleAccountResult(payload);
         if (name === topic("code/result")) handleCodeResult(payload);
+        if (name === topic("terminate/result")) handleTerminateResult(payload);
       });
     }
 
@@ -386,6 +410,13 @@
     $("codeBtn").addEventListener("click", () => {
       setMessage("正在查询验证码");
       publish("code/request", { requestId: requestId("code"), cardKey, token: state.token });
+    });
+
+    $("terminateBtn").addEventListener("click", () => {
+      if (!state.phone || state.code) return;
+      setMessage("正在终止并重新获取");
+      $("terminateBtn").disabled = true;
+      publish("terminate/request", { requestId: requestId("terminate"), cardKey, token: state.token });
     });
 
     $("phoneValue").addEventListener("click", () => copy(state.phone));
