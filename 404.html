@@ -31,6 +31,8 @@
     .code{color:#2563eb;font-size:22px;letter-spacing:0}
     .code.empty{color:#64748b;font-size:14px}
     .usage-badge{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:24px;margin:0 0 8px;border-radius:999px;background:#0f172a;color:#fff;font-size:14px;font-weight:900}
+    .note-box{margin-bottom:9px;border:1px solid #dbe3ee;border-radius:7px;background:#f8fafc;padding:8px 9px;color:#334155;font-size:13px;line-height:1.55}
+    .note-title{font-weight:900;color:#111827;margin-bottom:2px}
     .notice{margin-bottom:9px;border:1px solid #bfdbfe;border-radius:7px;background:#eff6ff;color:#1d4ed8;padding:8px 9px;font-size:13px;font-weight:800;line-height:1.35;text-align:center}
     .message{margin-top:9px;min-height:38px;border:1px solid #e5e7eb;border-radius:7px;background:#f8fafc;padding:9px;font-size:13px;line-height:1.4;color:#334155;word-break:break-word}
     .status{display:inline-flex;align-items:center;gap:6px;color:#64748b;font-size:12px;margin-top:10px}
@@ -50,6 +52,12 @@
     <section id="cardPanel" class="hidden">
       <div class="usage-badge hidden" id="usageBadge">-1</div>
       <section class="panel">
+        <div class="note-box">
+          <div class="note-title">操作说明：</div>
+          <div>因号码有时效性。</div>
+          <div>请在获取前先打开软件。</div>
+          <div>有问题及时联系客服</div>
+        </div>
         <div class="notice hidden" id="noticeValue"></div>
         <table class="code-table" aria-label="接码信息">
           <tbody>
